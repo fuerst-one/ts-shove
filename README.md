@@ -2,9 +2,28 @@
 
 Move TypeScript files and directories at scale — all import paths are rewritten automatically via ts-morph AST analysis.
 
-> "We restructured a 300+ file TypeScript codebase — 15 batch moves, 860 tests passing throughout, zero data loss. The tool paid for itself on the first task."
->
-> — Claude, Senior Autonomous Refactoring Engineer at Anthropic
+## Why it exists
+
+Moving a TypeScript file is easy; keeping all of its consumers pointing to the right place is the tedious part. ts-shove provides a deterministic refactoring step for AI coding agents and developers: describe the moves, preview conflicts, then rewrite the affected imports through the TypeScript AST.
+
+Built first for an agent skill workflow, the same implementation is available as a CLI and a library. It uses ts-morph rather than a language model, so executing a move needs no AI provider or API key. This public version handles file and directory moves and import rewriting; it does not expose symbol-renaming operations.
+
+```typescript
+// Move: src/components/Button.tsx -> src/ui/Button.tsx
+// A consumer's import changes from:
+import { Button } from "@/components/Button";
+// to:
+import { Button } from "@/ui/Button";
+```
+
+For a multi-file restructuring, keep the plan in a JSON manifest and preview it before applying:
+
+```bash
+ts-shove --dry-run moves.json
+ts-shove moves.json
+```
+
+The preview checks destination conflicts. After applying, run the target project's type checks and behavioral tests: static import rewriting cannot validate every runtime path or asset reference. See the supported imports and limitations below.
 
 ## Installation
 
@@ -54,21 +73,23 @@ Where `moves.json` contains:
 }
 ```
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `projectRoot` | `string` | git root or cwd | Absolute path to project root |
-| `moves` | `Record<string, string>` | (required) | Source-to-destination mapping. Trailing `/` = directory move |
-| `dryRun` | `boolean` | `false` | Preview without writing changes; detects destination conflicts |
-| `useAliases` | `"always" \| "never" \| "preserve"` | `"preserve"` | How to handle path alias imports |
+| Field          | Type                                | Default                         | Description                                                      |
+| -------------- | ----------------------------------- | ------------------------------- | ---------------------------------------------------------------- |
+| `projectRoot`  | `string`                            | git root or cwd                 | Absolute path to project root                                    |
+| `moves`        | `Record<string, string>`            | (required)                      | Source-to-destination mapping. Trailing `/` = directory move     |
+| `tsConfigPath` | `string`                            | `tsconfig.json` in project root | TypeScript configuration used to include files and resolve paths |
+| `dryRun`       | `boolean`                           | `false`                         | Preview without writing changes; detects destination conflicts   |
+| `useAliases`   | `"always" \| "never" \| "preserve"` | `"preserve"`                    | How to handle path alias imports                                 |
 
 ## CLI options
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--dry-run` | `-n` | Preview changes without modifying files; detects destination conflicts |
-| `--root <dir>` | `-r` | Project root (default: git root or cwd) |
-| `--use-aliases <mode>` | `-a` | Alias handling: `always`, `never`, `preserve` (default: `preserve`) |
-| `--help` | `-h` | Show usage information |
+| Flag                   | Short | Description                                                            |
+| ---------------------- | ----- | ---------------------------------------------------------------------- |
+| `--dry-run`            | `-n`  | Preview changes without modifying files; detects destination conflicts |
+| `--root <dir>`         | `-r`  | Project root (default: git root or cwd)                                |
+| `--tsconfig <path>`    | `-t`  | TypeScript configuration to load                                       |
+| `--use-aliases <mode>` | `-a`  | Alias handling: `always`, `never`, `preserve` (default: `preserve`)    |
+| `--help`               | `-h`  | Show usage information                                                 |
 
 ## Features
 
@@ -137,7 +158,9 @@ const result: MoveResult = executeMoves({
   useAliases: "preserve",
 });
 
-console.log(`Moved ${result.filesMoved} files, rewrote ${result.importsRewritten} imports`);
+console.log(
+  `Moved ${result.filesMoved} files, rewrote ${result.importsRewritten} imports`,
+);
 
 if (result.conflicts?.length) {
   console.warn("Destination conflicts:", result.conflicts);
@@ -147,7 +170,7 @@ if (result.conflicts?.length) {
 ## What it does NOT handle
 
 - **CSS/SCSS import paths** -- `@import` in stylesheets is not touched.
-- **Template literal imports** -- `` import(`./locale/${lang}`) `` is skipped (non-string-literal argument).
+- **Template literal imports** -- ``import(`./locale/${lang}`)`` is skipped (non-string-literal argument).
 - **Runtime string paths** -- Dynamically constructed import paths cannot be statically analyzed.
 - **Non-project files** -- Only files included in `tsconfig.json` are analyzed for import rewriting.
 - **Git rename tracking** -- Git detects renames by content similarity. When a move rewrites many import lines, the file content may change enough that git no longer recognizes it as a rename, and `git log --follow` won't track the history. This is a fundamental git limitation. For critical files, consider committing the rename and import rewrites as separate steps.
@@ -214,6 +237,10 @@ Requires Node.js 20+ and a `tsconfig.json` at the project root.
 ## Platform support
 
 Tested on macOS and Linux (via CI). Windows is expected to work (all path handling uses Node.js `path` module) but has not been tested. If you encounter Windows-specific issues, please [open an issue](https://github.com/fuerst-one/ts-shove/issues).
+
+## Author
+
+Created by [Alexander Fürst](https://fuerst.one), as part of an actively used AI coding-agent workflow.
 
 ## Credits
 
